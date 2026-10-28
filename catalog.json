@@ -1,0 +1,12 @@
+{
+  "block": [],
+  "apps": [
+    {
+      "name": "Googleblat",
+      "packageName": "com.googleblat.store",
+      "description": "This store. Updates come from this repo's GitHub releases.",
+      "certSha256": ["4dd7494068c68fe0888e1839589cf08d3326290bd780ae8f38002240885885e4"],
+      "source": { "type": "github", "repo": "arielhalif1/Googleblat", "asset": "\\.apk$" }
+    }
+  ]
+}
