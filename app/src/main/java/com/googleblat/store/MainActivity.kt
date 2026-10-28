@@ -141,8 +141,9 @@ class MainActivity : Activity() {
             text("🔒 Locked - only apps from this list can be installed")
             button("Unlock for ${Lockdown.UNLOCK_MINUTES} minutes…") { askPasswordThenUnlock() }
         } else {
-            text("🔓 Unlocked until ${time(until)}. Other installs, ADB, Google Play and other " +
-                "stores are allowed. Apps not on the list are hidden again when it locks.")
+            text("🔓 Unlocked until ${time(until)}. All apps are visible, and other installs, ADB, " +
+                "Google Play and other stores are allowed. Apps not on the list (or kept) are " +
+                "hidden again when it locks.")
             button("Lock now") { Lockdown.lock(this); render() }
             button("Change password") { changePassword() }
             button("Remove Googleblat completely…") { confirmRemove() }

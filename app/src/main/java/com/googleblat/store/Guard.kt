@@ -57,10 +57,18 @@ object Guard {
         Lockdown.enforce(ctx)
     }
 
-    fun unhideAll(ctx: Context) {
-        for (pkg in hidden(ctx)) {
+    /** While unlocked, everything is visible; [hideStrays] hides the same apps again on lock. */
+    fun showHidden(ctx: Context) {
+        val hidden = hidden(ctx)
+        if (hidden.isEmpty()) return
+        for (pkg in hidden) {
             runCatching { Lockdown.dpm(ctx).setApplicationHidden(Lockdown.admin(ctx), pkg, false) }
         }
+        prefs(ctx).edit().putStringSet(KEY_HIDDEN, emptySet()).apply()
+    }
+
+    fun unhideAll(ctx: Context) {
+        showHidden(ctx)
         prefs(ctx).edit().clear().apply()
     }
 

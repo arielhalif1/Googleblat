@@ -122,7 +122,7 @@ object Lockdown {
         }
         setHidden(ctx, otherStores(ctx), locked)
         setPlayBlocked(ctx, locked && playOpenUntil(ctx) == 0L && !inNightlyWindow())
-        if (locked) Guard.hideStrays(ctx)
+        if (locked) Guard.hideStrays(ctx) else Guard.showHidden(ctx)
         scheduleAlarms(ctx)
     }
 
