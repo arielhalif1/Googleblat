@@ -7,6 +7,21 @@
       "description": "This store. Updates come from this repo's GitHub releases.",
       "certSha256": ["4dd7494068c68fe0888e1839589cf08d3326290bd780ae8f38002240885885e4"],
       "source": { "type": "github", "repo": "arielhalif1/Googleblat", "asset": "\\.apk$" }
-    }
+    },
+    { "name": "WhatsApp", "packageName": "com.whatsapp", "description": "Messaging" },
+    { "name": "Moovit", "packageName": "com.tranzmate", "description": "Public transport" },
+    { "name": "Waze", "packageName": "com.waze", "description": "Navigation" },
+    { "name": "PalGate", "packageName": "com.bluegate.app", "description": "Gate opener" },
+    { "name": "Wolt", "packageName": "com.wolt.android", "description": "Food delivery" },
+    { "name": "bit", "packageName": "com.bnhp.payments.paymentsapp", "description": "Payments" },
+    { "name": "Isracard", "packageName": "com.isracard.hatavot", "description": "ישראכרט - credit card" },
+    { "name": "max", "packageName": "com.ideomobile.leumicard", "description": "Credit card" },
+    { "name": "Mercantile", "packageName": "com.ideomobile.mercantile", "description": "Mercantile Discount Bank" },
+    { "name": "Meitav", "packageName": "com.meitavdash.mobilegemel", "description": "מיטב - savings and pension" },
+    { "name": "YouTube Music", "packageName": "com.google.android.apps.youtube.music", "description": "Music" },
+    { "name": "Microsoft Teams", "packageName": "com.microsoft.teams", "description": "Work chat and meetings" },
+    { "name": "Claude", "packageName": "com.anthropic.claude", "description": "AI assistant" },
+    { "name": "ChatGPT", "packageName": "com.openai.chatgpt", "description": "AI assistant" },
+    { "name": "Gemini", "packageName": "com.google.android.apps.bard", "description": "AI assistant" }
   ]
 }

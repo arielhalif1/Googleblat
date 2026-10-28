@@ -1,14 +1,29 @@
 package com.googleblat.store
 
+import android.app.Application
 import android.app.admin.DeviceAdminReceiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageInstaller
 import android.os.Build
 import android.widget.Toast
 
 class AdminReceiver : DeviceAdminReceiver()
+
+/** While the process is alive, hide stray apps the moment they're installed (e.g. from Play). */
+class GoogleblatApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        val filter = IntentFilter(Intent.ACTION_PACKAGE_ADDED).apply { addDataScheme("package") }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) = Lockdown.enforce(context)
+        }
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
+        else registerReceiver(receiver, filter)
+    }
+}
 
 class RelockReceiver : BroadcastReceiver() {
     companion object {

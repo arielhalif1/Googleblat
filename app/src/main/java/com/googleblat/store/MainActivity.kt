@@ -10,6 +10,7 @@ import android.text.InputType
 import android.text.format.DateFormat
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -50,7 +51,8 @@ class MainActivity : Activity() {
                 render()
             }
         }
-        if (catalog == null && Lockdown.isDeviceOwner(this)) loadCatalog() else render()
+        if (catalog == null) catalog = CatalogRepo.cached(this)
+        if (!loading && Lockdown.isDeviceOwner(this)) loadCatalog() else render()
     }
 
     override fun onPause() {
@@ -63,6 +65,7 @@ class MainActivity : Activity() {
         when {
             !Lockdown.isDeviceOwner(this) -> renderSetup()
             !Passwords.isSet(this) -> renderCreatePassword()
+            !Lockdown.isSetupDone(this) -> renderReview()
             else -> renderStore()
         }
     }
@@ -92,17 +95,42 @@ class MainActivity : Activity() {
         )
         val first = passwordField("Password")
         val second = passwordField("Repeat password")
-        button("Set password and lock") {
+        button("Set password") {
             val pw = first.text.toString()
             when {
                 pw.length < 6 -> toast("Use at least 6 characters")
                 pw != second.text.toString() -> toast("Passwords don't match")
                 else -> {
                     Passwords.set(this, pw)
-                    Lockdown.lock(this)
                     render()
                 }
             }
+        }
+    }
+
+    /** Before the first lock: choose which current apps outside the catalog to keep. */
+    private fun renderReview() {
+        title("Review your apps")
+        if (catalog == null) {
+            text(if (loading) "Loading catalog…" else "Couldn't load catalog: $catalogError")
+            if (!loading) button("Retry") { loadCatalog() }
+            return
+        }
+        val strays = Guard.strays(this).sortedBy { Guard.label(this, it.packageName).lowercase() }
+        text(
+            "When locked, apps that aren't in the catalog get hidden. Their data is kept, and you " +
+                "can bring them back while unlocked. Tick the ones to keep."
+        )
+        if (strays.isEmpty()) text("Nothing to hide - every installed app is allowed.")
+        val boxes = strays.map { app ->
+            CheckBox(this).apply {
+                text = "${Guard.label(this@MainActivity, app.packageName)}  (${app.packageName})"
+            }.also(root::addView)
+        }
+        button("Lock now") {
+            val keep = strays.zip(boxes).filter { it.second.isChecked }.map { it.first.packageName }
+            Lockdown.finishSetup(this, keep.toSet())
+            render()
         }
     }
 
@@ -110,19 +138,47 @@ class MainActivity : Activity() {
         title("Googleblat")
         val until = Lockdown.unlockedUntil(this)
         if (until == 0L) {
-            text("🔒 Locked - apps install only from this store")
+            text("🔒 Locked - only apps from this list can be installed")
             button("Unlock for ${Lockdown.UNLOCK_MINUTES} minutes…") { askPasswordThenUnlock() }
         } else {
-            text("🔓 Unlocked until ${DateFormat.getTimeFormat(this).format(Date(until))}. " +
-                "Other installs, ADB, and blocked stores are allowed.")
+            text("🔓 Unlocked until ${time(until)}. Other installs, ADB, Google Play and other " +
+                "stores are allowed. Apps not on the list are hidden again when it locks.")
             button("Lock now") { Lockdown.lock(this); render() }
             button("Change password") { changePassword() }
             button("Remove Googleblat completely…") { confirmRemove() }
+        }
+        val playUntil = Lockdown.playOpenUntil(this)
+        if (until == 0L && playUntil > 0) {
+            text("Google Play is open until ${time(playUntil)}. Apps not on the list are hidden as soon as they install.")
+            button("Close Google Play now") { Lockdown.closePlay(this); render() }
+        }
+        if (Lockdown.playMode(this) == "hidden") {
+            text("⚠ Android wouldn't let Google Play be paused, so it's hidden instead. Apps that " +
+                "check Play integrity (banking) may fail while locked.")
         }
         button(if (loading) "Loading catalog…" else "Refresh catalog", enabled = !loading) { loadCatalog() }
 
         catalogError?.let { text("Couldn't load catalog: $it") }
         catalog?.apps?.forEach { renderApp(it) }
+        if (until != 0L) renderOtherApps()
+    }
+
+    /** While unlocked: apps outside the catalog, and whether each may stay. */
+    private fun renderOtherApps() {
+        val hiddenOrStray = (Guard.hidden(this) + Guard.strays(this).map { it.packageName })
+            .sortedBy { Guard.label(this, it).lowercase() }
+        val kept = Guard.kept(this).sortedBy { Guard.label(this, it).lowercase() }
+        if (hiddenOrStray.isEmpty() && kept.isEmpty()) return
+        title("Apps outside the catalog")
+        for (pkg in hiddenOrStray) {
+            val state = if (pkg in Guard.hidden(this)) "hidden" else "will be hidden on lock"
+            text("${Guard.label(this, pkg)} - $state")
+            button("Keep ${Guard.label(this, pkg)}") { Guard.allow(this, pkg); render() }
+        }
+        for (pkg in kept) {
+            text("${Guard.label(this, pkg)} - kept")
+            button("Stop keeping ${Guard.label(this, pkg)}") { Guard.disallow(this, pkg); render() }
+        }
     }
 
     private fun renderApp(app: AppEntry) {
@@ -149,12 +205,16 @@ class MainActivity : Activity() {
         card.addView(Button(this).apply {
             val working = app.packageName in busy
             text = when {
+                app.source == Source.Play -> if (installed != null) "Update on Google Play" else "Install from Google Play"
                 working -> "Working…"
                 installed != null -> "Update / reinstall"
                 else -> "Install"
             }
             isEnabled = !working
-            setOnClickListener { install(app) }
+            setOnClickListener {
+                if (app.source == Source.Play) Lockdown.openPlayFor(this@MainActivity, app.packageName)
+                else install(app)
+            }
         })
     }
 
@@ -164,7 +224,7 @@ class MainActivity : Activity() {
         loading = true
         render()
         io.execute {
-            val result = runCatching { CatalogRepo.fetch() }
+            val result = runCatching { CatalogRepo.fetch(this) }
             runOnUiThread {
                 loading = false
                 result.onSuccess {
@@ -271,6 +331,8 @@ class MainActivity : Activity() {
     }
 
     // ---- Helpers ----
+
+    private fun time(t: Long): String = DateFormat.getTimeFormat(this).format(Date(t))
 
     private fun installedVersion(pkg: String): String? = try {
         packageManager.getPackageInfo(pkg, 0).versionName ?: "?"

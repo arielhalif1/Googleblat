@@ -1,5 +1,6 @@
 package com.googleblat.store
 
+import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -17,6 +18,8 @@ data class AppEntry(
 )
 
 sealed class Source {
+    /** Installed by Google Play (opened briefly by Googleblat). The default. */
+    object Play : Source()
     data class Url(val url: String) : Source()
     data class GitHub(val repo: String, val assetPattern: Regex) : Source()
     object FDroid : Source()
@@ -28,17 +31,32 @@ data class Catalog(val apps: List<AppEntry>, val block: Set<String>)
 data class Resolved(val url: String, val version: String?)
 
 object CatalogRepo {
-    fun fetch(): Catalog = parse(JSONObject(Http.getText(BuildConfig.CATALOG_URL)))
+    private const val PREFS = "catalog"
+
+    /** Downloads the catalog and caches it; the cache is what the allowlist uses offline. */
+    fun fetch(ctx: Context): Catalog {
+        val text = Http.getText(BuildConfig.CATALOG_URL)
+        val catalog = parse(JSONObject(text))
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("json", text).apply()
+        return catalog
+    }
+
+    /** The last catalog that downloaded and parsed successfully, or null if there never was one. */
+    fun cached(ctx: Context): Catalog? {
+        val text = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("json", null)
+        return text?.let { runCatching { parse(JSONObject(it)) }.getOrNull() }
+    }
 
     fun parse(json: JSONObject): Catalog {
         val apps = json.getJSONArray("apps").objects().map { a ->
-            val src = a.getJSONObject("source")
+            val src = a.optJSONObject("source") ?: JSONObject().put("type", "play")
             AppEntry(
                 name = a.getString("name"),
                 packageName = a.getString("packageName"),
                 description = a.optString("description"),
                 certs = (a.optJSONArray("certSha256") ?: JSONArray()).strings().map(::normalizeCert).toSet(),
                 source = when (val type = src.getString("type")) {
+                    "play" -> Source.Play
                     "url" -> Source.Url(src.getString("url"))
                     "github" -> Source.GitHub(
                         src.getString("repo"),
@@ -54,6 +72,7 @@ object CatalogRepo {
     }
 
     fun resolve(app: AppEntry): Resolved = when (val s = app.source) {
+        Source.Play -> error("${app.packageName} installs through Google Play")
         is Source.Url -> Resolved(s.url, null)
         is Source.GitHub -> {
             val release = JSONObject(Http.getText("https://api.github.com/repos/${s.repo}/releases/latest"))
