@@ -40,6 +40,7 @@ object Lockdown {
     private val OTHER_STORES = setOf(
         "com.xiaomi.market",    // Xiaomi GetApps
         "com.xiaomi.mipicks",
+        "com.sec.android.app.samsungapps", // Samsung Galaxy Store
     )
 
     private const val PREFS = "lockdown"
