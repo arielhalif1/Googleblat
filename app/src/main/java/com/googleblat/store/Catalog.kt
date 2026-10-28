@@ -41,9 +41,10 @@ object CatalogRepo {
         return catalog
     }
 
-    /** The last catalog that downloaded and parsed successfully, or null if there never was one. */
+    /** The last catalog that downloaded successfully, else the copy bundled in the APK. */
     fun cached(ctx: Context): Catalog? {
         val text = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("json", null)
+            ?: runCatching { ctx.assets.open("catalog.json").bufferedReader().use { it.readText() } }.getOrNull()
         return text?.let { runCatching { parse(JSONObject(it)) }.getOrNull() }
     }
 

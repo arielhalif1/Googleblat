@@ -54,3 +54,12 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 }
+
+// Bundle catalog.json as a fallback for when GitHub can't be reached.
+val catalogAssets = layout.buildDirectory.dir("generated/catalogAssets")
+val copyCatalog by tasks.registering(Copy::class) {
+    from(rootProject.file("catalog.json"))
+    into(catalogAssets)
+}
+android.sourceSets["main"].assets.srcDir(catalogAssets)
+tasks.named("preBuild") { dependsOn(copyCatalog) }

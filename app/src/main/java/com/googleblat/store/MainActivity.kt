@@ -158,7 +158,7 @@ class MainActivity : Activity() {
         }
         button(if (loading) "Loading catalog…" else "Refresh catalog", enabled = !loading) { loadCatalog() }
 
-        catalogError?.let { text("Couldn't load catalog: $it") }
+        catalogError?.let { text("Couldn't refresh catalog, using the saved copy: $it") }
         catalog?.apps?.forEach { renderApp(it) }
         if (until != 0L) renderOtherApps()
     }
