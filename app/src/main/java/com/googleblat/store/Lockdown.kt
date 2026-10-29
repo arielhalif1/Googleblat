@@ -140,7 +140,8 @@ object Lockdown {
     }
 
     private fun otherStores(ctx: Context) =
-        OTHER_STORES + prefs(ctx).getStringSet(KEY_EXTRA_BLOCKED, emptySet())!!
+        OTHER_STORES + prefs(ctx).getStringSet(KEY_EXTRA_BLOCKED, emptySet())!! +
+            (CatalogRepo.cached(ctx)?.block ?: emptySet())
 
     private fun inNightlyWindow() =
         Calendar.getInstance().get(Calendar.HOUR_OF_DAY) == NIGHTLY_UPDATE_HOUR
