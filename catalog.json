@@ -1,5 +1,6 @@
 {
-  "block": ["com.android.chrome"],
+  "block": [],
+  "alwaysBlock": ["com.android.chrome"],
   "apps": [
     {
       "name": "Googleblat",

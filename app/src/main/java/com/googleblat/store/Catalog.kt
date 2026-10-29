@@ -25,7 +25,8 @@ sealed class Source {
     object FDroid : Source()
 }
 
-data class Catalog(val apps: List<AppEntry>, val block: Set<String>)
+/** [block]: hidden while locked. [alwaysBlock]: hidden even while unlocked. */
+data class Catalog(val apps: List<AppEntry>, val block: Set<String>, val alwaysBlock: Set<String>)
 
 /** A concrete download for an [AppEntry]: where to get it and a label for the version. */
 data class Resolved(val url: String, val version: String?)
@@ -69,7 +70,8 @@ object CatalogRepo {
             )
         }
         val block = (json.optJSONArray("block") ?: JSONArray()).strings().toSet()
-        return Catalog(apps, block)
+        val alwaysBlock = (json.optJSONArray("alwaysBlock") ?: JSONArray()).strings().toSet()
+        return Catalog(apps, block, alwaysBlock)
     }
 
     fun resolve(app: AppEntry): Resolved = when (val s = app.source) {

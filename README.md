@@ -80,6 +80,8 @@ Source types:
 
 `block` holds extra package names to hide while locked, for example another preinstalled store. Removing an app from the catalog hides it at the next check.
 
+`alwaysBlock` holds packages hidden **even while unlocked**, for example a browser you never want to use. Taking a package off this list brings it back.
+
 ## Updating the store itself
 
 Bump `versionCode` in `app/build.gradle.kts`, build, and attach `app-release.apk` to a new GitHub release. Then tap *Update* on the Googleblat entry.

@@ -49,6 +49,7 @@ object Lockdown {
     private const val KEY_PLAY_UNTIL = "playUntil"
     private const val KEY_PLAY_MODE = "playMode"
     private const val KEY_EXTRA_BLOCKED = "extraBlocked"
+    private const val KEY_ALWAYS_HIDDEN = "alwaysHidden"
 
     fun admin(ctx: Context) = ComponentName(ctx, AdminReceiver::class.java)
     fun dpm(ctx: Context): DevicePolicyManager = ctx.getSystemService(DevicePolicyManager::class.java)
@@ -121,6 +122,7 @@ object Lockdown {
             if (locked) dpm.addUserRestriction(admin(ctx), r) else dpm.clearUserRestriction(admin(ctx), r)
         }
         setHidden(ctx, otherStores(ctx), locked)
+        applyAlwaysBlocked(ctx)
         setPlayBlocked(ctx, locked && playOpenUntil(ctx) == 0L && !inNightlyWindow())
         if (locked) Guard.hideStrays(ctx) else Guard.showHidden(ctx)
         scheduleAlarms(ctx)
@@ -131,6 +133,7 @@ object Lockdown {
         val dpm = dpm(ctx)
         RESTRICTIONS.forEach { dpm.clearUserRestriction(admin(ctx), it) }
         setHidden(ctx, otherStores(ctx), false)
+        setHidden(ctx, prefs(ctx).getStringSet(KEY_ALWAYS_HIDDEN, emptySet())!!, false)
         setPlayBlocked(ctx, false)
         Guard.unhideAll(ctx)
         alarms(ctx).cancel(alarmIntent(ctx, 0))
@@ -142,6 +145,15 @@ object Lockdown {
     private fun otherStores(ctx: Context) =
         OTHER_STORES + prefs(ctx).getStringSet(KEY_EXTRA_BLOCKED, emptySet())!! +
             (CatalogRepo.cached(ctx)?.block ?: emptySet())
+
+    /** Hides the catalog's "alwaysBlock" apps, and unhides ones that were taken off that list. */
+    private fun applyAlwaysBlocked(ctx: Context) {
+        val now = CatalogRepo.cached(ctx)?.alwaysBlock ?: return
+        val before = prefs(ctx).getStringSet(KEY_ALWAYS_HIDDEN, emptySet())!!
+        setHidden(ctx, before - now, false)
+        setHidden(ctx, now, true)
+        prefs(ctx).edit().putStringSet(KEY_ALWAYS_HIDDEN, now).apply()
+    }
 
     private fun inNightlyWindow() =
         Calendar.getInstance().get(Calendar.HOUR_OF_DAY) == NIGHTLY_UPDATE_HOUR
