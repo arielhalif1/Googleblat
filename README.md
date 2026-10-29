@@ -9,7 +9,7 @@ It works by becoming the phone's **device owner**, the mechanism companies use f
 - **Sideloading is blocked:** "install unknown apps" is off for every app, USB debugging is off (so no `adb install`), Second space and work profiles are blocked, and Xiaomi GetApps is hidden.
 - **Apps from other sources work too.** The store installs GitHub, F-Droid or direct-download apps itself, after checking each APK's signing certificate against the one pinned in the catalog.
 
-**Unlocking** takes the password, then a 60-second wait. Everything above is lifted for 15 minutes. While unlocked, the store lists apps outside the catalog so you can choose to keep them. The store can't be uninstalled, force-stopped, or have its data cleared from Settings. You can only remove it from inside the app while unlocked, or with a factory reset.
+**Unlocking** takes the password, then you choose how long: 15 minutes, 1 hour, 3 hours or 24 hours. Everything above is lifted and hidden apps come back. While unlocked, the store lists apps outside the catalog so you can choose to keep them. The store can't be uninstalled, force-stopped, or have its data cleared from Settings. You can only remove it from inside the app while unlocked, or with a factory reset.
 
 > If you forget the password, the only way out is a factory reset. Back up your photos and other data.
 

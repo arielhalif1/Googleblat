@@ -5,7 +5,6 @@ import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.os.Bundle
-import android.os.CountDownTimer
 import android.text.InputType
 import android.text.format.DateFormat
 import android.view.View
@@ -87,9 +86,8 @@ class MainActivity : Activity() {
     private fun renderCreatePassword() {
         title("Choose an unlock password")
         text(
-            "You'll need this to install anything from outside Googleblat. Unlocking waits " +
-                "${Lockdown.UNLOCK_DELAY_SECONDS} seconds, then allows other installs for " +
-                "${Lockdown.UNLOCK_MINUTES} minutes.\n\n" +
+            "You'll need this to install anything from outside Googleblat. Unlocking allows " +
+                "other installs for a time you choose, from 15 minutes to 24 hours.\n\n" +
                 "If you forget it, the only way out is a factory reset. Consider giving it to " +
                 "someone you trust instead of remembering it yourself."
         )
@@ -139,7 +137,7 @@ class MainActivity : Activity() {
         val until = Lockdown.unlockedUntil(this)
         if (until == 0L) {
             text("🔒 Locked - only apps from this list can be installed")
-            button("Unlock for ${Lockdown.UNLOCK_MINUTES} minutes…") { askPasswordThenUnlock() }
+            button("Unlock…") { askPasswordThenUnlock() }
         } else {
             text("🔓 Unlocked until ${time(until)}. All apps are visible, and other installs, ADB, " +
                 "Google Play and other stores are allowed. Apps not on the list (or kept) are " +
@@ -262,7 +260,7 @@ class MainActivity : Activity() {
             .setView(padded(field))
             .setPositiveButton("Unlock") { _, _ ->
                 when (val r = Passwords.check(this, field.text.toString())) {
-                    Passwords.Result.Ok -> countdownThenUnlock()
+                    Passwords.Result.Ok -> chooseUnlockDuration()
                     Passwords.Result.Wrong -> toast("Wrong password")
                     is Passwords.Result.TooSoon -> toast("Too many tries. Wait ${r.seconds}s")
                 }
@@ -271,28 +269,15 @@ class MainActivity : Activity() {
             .show()
     }
 
-    /** A cooling-off wait before unlocking: do you really need this? */
-    private fun countdownThenUnlock() {
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Unlocking…")
-            .setMessage("")
-            .setNegativeButton("Never mind", null)
-            .setCancelable(false)
-            .create()
-        val timer = object : CountDownTimer(Lockdown.UNLOCK_DELAY_SECONDS * 1000L, 1000) {
-            override fun onTick(left: Long) {
-                dialog.setMessage("Unlocking in ${(left + 999) / 1000} seconds. Still need it?")
-            }
-
-            override fun onFinish() {
-                dialog.dismiss()
-                Lockdown.unlock(this@MainActivity)
+    private fun chooseUnlockDuration() {
+        AlertDialog.Builder(this)
+            .setTitle("Unlock for…")
+            .setItems(Lockdown.UNLOCK_CHOICES.map { it.first }.toTypedArray()) { _, which ->
+                Lockdown.unlock(this, Lockdown.UNLOCK_CHOICES[which].second)
                 render()
             }
-        }
-        dialog.setOnDismissListener { timer.cancel() }
-        dialog.show()
-        timer.start()
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun changePassword() {

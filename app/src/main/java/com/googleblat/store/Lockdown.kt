@@ -16,12 +16,12 @@ import java.util.Calendar
  * Locked (normal): sideloading and ADB are blocked, other stores are hidden, Google Play is
  * paused except during a short "Play window" or the nightly update hour, and any non-system app
  * that isn't allowed gets hidden (its data is kept).
- * Unlocked: all of that is lifted for [UNLOCK_MINUTES]. Everything goes through [enforce], which
+ * Unlocked: all of that is lifted for one of [UNLOCK_CHOICES]. Everything goes through [enforce], which
  * runs on app start, boot, package installs, and an alarm.
  */
 object Lockdown {
-    const val UNLOCK_MINUTES = 15
-    const val UNLOCK_DELAY_SECONDS = 60
+    /** Unlock durations offered after the password: label to minutes. */
+    val UNLOCK_CHOICES = listOf("15 minutes" to 15, "1 hour" to 60, "3 hours" to 180, "24 hours" to 1440)
     const val PLAY_WINDOW_MINUTES = 10
     /** Play is open from this hour for one hour every night, so it can update apps. */
     const val NIGHTLY_UPDATE_HOUR = 3
@@ -89,8 +89,8 @@ object Lockdown {
         enforce(ctx)
     }
 
-    fun unlock(ctx: Context) {
-        val until = System.currentTimeMillis() + UNLOCK_MINUTES * 60_000L
+    fun unlock(ctx: Context, minutes: Int) {
+        val until = System.currentTimeMillis() + minutes * 60_000L
         prefs(ctx).edit().putLong(KEY_UNTIL, until).apply()
         enforce(ctx)
     }
