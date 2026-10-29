@@ -8,6 +8,7 @@
       "certSha256": ["4dd7494068c68fe0888e1839589cf08d3326290bd780ae8f38002240885885e4"],
       "source": { "type": "github", "repo": "arielhalif1/Googleblat", "asset": "\\.apk$" }
     },
+    { "name": "Spin Browser", "packageName": "com.nationaledtech.spinbrowser", "description": "Filtered web browser" },
     { "name": "WhatsApp", "packageName": "com.whatsapp", "description": "Messaging" },
     { "name": "Moovit", "packageName": "com.tranzmate", "description": "Public transport" },
     { "name": "Waze", "packageName": "com.waze", "description": "Navigation" },
