@@ -4,6 +4,12 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Unlock windows must end exactly on time, and reminders should arrive on time -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Needed to show installed versions of catalog apps (sideloaded, so no Play policy applies) -->
     <uses-permission
@@ -50,6 +56,10 @@
 
         <receiver
             android:name=".InstallResultReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".ReminderReceiver"
             android:exported="false" />
     </application>
 </manifest>

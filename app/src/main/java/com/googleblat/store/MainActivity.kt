@@ -2,6 +2,7 @@ package com.googleblat.store
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.os.Bundle
@@ -41,6 +42,12 @@ class MainActivity : Activity() {
             fitsSystemWindows = true
             addView(root)
         })
+        showStreak = intent.getBooleanExtra(Reminders.EXTRA_OPEN_STREAK, false)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(Reminders.EXTRA_OPEN_STREAK, false)) showStreak = true
     }
 
     override fun onResume() {
@@ -119,6 +126,7 @@ class MainActivity : Activity() {
         text(Streak.quote(days))
         text("השיא שלך: ${Streak.best(this)} ימים · התחלת הספירה: ${date(Streak.start(this))}")
 
+        text("🌙 שעות מסוכנות: ${Lockdown.DANGER_START_HOUR}:00–${Lockdown.DANGER_END_HOUR}:00. בשעות האלה אי אפשר לפתוח את החסימה.\n🔔 תזכורות: 9:00, ${Lockdown.DANGER_START_HOUR}:00, 22:30.")
         renderPanic()
 
         button("נפלתי, מתחילים מחדש") {
@@ -237,7 +245,14 @@ class MainActivity : Activity() {
         text(if (filter != null) "🛡 Website filter on ($filter)" else "⚠ Website filter not active yet. It turns on once the phone is online.")
         if (until == 0L) {
             text("🔒 Locked - only apps from this list can be installed")
-            if (Lockdown.panicUntil(this) == 0L) button("Unlock…") { askPasswordThenUnlock() }
+            when {
+                Lockdown.panicUntil(this) > 0 -> {}
+                Lockdown.inDangerHours() -> text(
+                    "🌙 Danger hours (${Lockdown.DANGER_START_HOUR}:00–${Lockdown.DANGER_END_HOUR}:00): " +
+                        "unlocking is only possible between ${Lockdown.DANGER_END_HOUR}:00 and ${Lockdown.DANGER_START_HOUR}:00."
+                )
+                else -> button("Unlock…") { askPasswordThenUnlock() }
+            }
             renderPanic()
         } else {
             text("🔓 Unlocked until ${time(until)}. All apps are visible, and other installs, ADB, " +
@@ -355,7 +370,7 @@ class MainActivity : Activity() {
     }
 
     private fun askPasswordThenUnlock() {
-        if (Lockdown.panicUntil(this) > 0) return
+        if (!Lockdown.canUnlock(this)) return
         val field = passwordInput()
         AlertDialog.Builder(this)
             .setTitle("Unlock password")

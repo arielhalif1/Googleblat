@@ -113,9 +113,33 @@ object Lockdown {
         lock(ctx)
     }
 
+    /**
+     * Danger hours: from [DANGER_START_HOUR] until [DANGER_END_HOUR] the next day, the password
+     * can't unlock, and an open unlock closes when they begin.
+     */
+    const val DANGER_START_HOUR = 20
+    const val DANGER_END_HOUR = 12
+
+    fun inDangerHours(): Boolean {
+        val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        return h >= DANGER_START_HOUR || h < DANGER_END_HOUR
+    }
+
+    /** When the next danger hours begin. */
+    private fun nextDangerStart(): Long = Calendar.getInstance().apply {
+        if (get(Calendar.HOUR_OF_DAY) >= DANGER_START_HOUR) add(Calendar.DAY_OF_YEAR, 1)
+        set(Calendar.HOUR_OF_DAY, DANGER_START_HOUR)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    fun canUnlock(ctx: Context) = panicUntil(ctx) == 0L && !inDangerHours()
+
+    /** Unlocks for [minutes], but never into the danger hours. */
     fun unlock(ctx: Context, minutes: Int) {
-        if (panicUntil(ctx) > 0) return
-        val until = System.currentTimeMillis() + minutes * 60_000L
+        if (!canUnlock(ctx)) return
+        val until = minOf(System.currentTimeMillis() + minutes * 60_000L, nextDangerStart())
         prefs(ctx).edit().putLong(KEY_UNTIL, until).apply()
         enforce(ctx)
     }
@@ -140,6 +164,10 @@ object Lockdown {
     /** Applies whatever the current state calls for. Safe to call any time, any number of times. */
     fun enforce(ctx: Context) {
         if (!isDeviceOwner(ctx) || !Passwords.isSet(ctx) || !isSetupDone(ctx)) return
+        if (!isLocked(ctx) && (inDangerHours() || panicUntil(ctx) > 0)) {
+            prefs(ctx).edit().putLong(KEY_UNTIL, 0).apply()
+        }
+        Reminders.ensureScheduled(ctx)
         val locked = isLocked(ctx)
         val dpm = dpm(ctx)
         for (r in RESTRICTIONS) {
@@ -252,11 +280,21 @@ object Lockdown {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
+    /** Exact when allowed (USE_EXACT_ALARM), so an unlock really ends on time; else best effort. */
+    fun setExactAlarm(ctx: Context, at: Long, pi: PendingIntent) {
+        val am = alarms(ctx)
+        if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        } else {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        }
+    }
+
     private fun scheduleAlarms(ctx: Context) {
         val am = alarms(ctx)
         // Precise-ish alarm for the next deadline (unlock or Play window ending).
         val next = listOf(unlockedUntil(ctx), playOpenUntil(ctx)).filter { it > 0 }.minOrNull()
-        if (next != null) am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, alarmIntent(ctx, 0))
+        if (next != null) setExactAlarm(ctx, next, alarmIntent(ctx, 0))
         else am.cancel(alarmIntent(ctx, 0))
         // Regular sweep: catches stray installs and opens/closes the nightly Play window.
         am.setInexactRepeating(
