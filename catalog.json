@@ -1,6 +1,7 @@
 {
   "block": [],
   "alwaysBlock": ["com.android.chrome"],
+  "privateDns": "adult-filter-dns.cleanbrowsing.org",
   "apps": [
     {
       "name": "Googleblat",

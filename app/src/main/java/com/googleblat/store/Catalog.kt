@@ -25,8 +25,16 @@ sealed class Source {
     object FDroid : Source()
 }
 
-/** [block]: hidden while locked. [alwaysBlock]: hidden even while unlocked. */
-data class Catalog(val apps: List<AppEntry>, val block: Set<String>, val alwaysBlock: Set<String>)
+/**
+ * [block]: hidden while locked. [alwaysBlock]: hidden even while unlocked.
+ * [privateDns]: a filtering DNS-over-TLS host applied to the whole phone, or null for none.
+ */
+data class Catalog(
+    val apps: List<AppEntry>,
+    val block: Set<String>,
+    val alwaysBlock: Set<String>,
+    val privateDns: String?,
+)
 
 /** A concrete download for an [AppEntry]: where to get it and a label for the version. */
 data class Resolved(val url: String, val version: String?)
@@ -71,7 +79,8 @@ object CatalogRepo {
         }
         val block = (json.optJSONArray("block") ?: JSONArray()).strings().toSet()
         val alwaysBlock = (json.optJSONArray("alwaysBlock") ?: JSONArray()).strings().toSet()
-        return Catalog(apps, block, alwaysBlock)
+        val privateDns = json.optString("privateDns").takeIf { it.isNotBlank() }
+        return Catalog(apps, block, alwaysBlock, privateDns)
     }
 
     fun resolve(app: AppEntry): Resolved = when (val s = app.source) {

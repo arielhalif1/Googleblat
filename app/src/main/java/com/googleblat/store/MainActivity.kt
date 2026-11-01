@@ -7,11 +7,13 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
 import android.text.format.DateFormat
+import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -27,6 +29,7 @@ class MainActivity : Activity() {
     private var loading = false
     private val busy = mutableSetOf<String>()
     private val errors = mutableMapOf<String, String>()
+    private var showStreak = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,12 +64,107 @@ class MainActivity : Activity() {
 
     private fun render() {
         root.removeAllViews()
+        root.layoutDirection = View.LAYOUT_DIRECTION_LOCALE
         when {
             !Lockdown.isDeviceOwner(this) -> renderSetup()
             !Passwords.isSet(this) -> renderCreatePassword()
             !Lockdown.isSetupDone(this) -> renderReview()
-            else -> renderStore()
+            else -> {
+                renderTabs()
+                if (showStreak) renderStreak() else renderStore()
+            }
         }
+    }
+
+    private fun renderTabs() {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((label, streak) in listOf("Store" to false, "🔥 ספירת ימים" to true)) {
+            row.addView(Button(this).apply {
+                text = label
+                isEnabled = showStreak != streak
+                setOnClickListener { showStreak = streak; render() }
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        root.addView(row)
+    }
+
+    private fun renderStreak() {
+        root.layoutDirection = View.LAYOUT_DIRECTION_RTL
+        val days = Streak.days(this)
+        val goal = Streak.nextGoal(days)
+        title("ספירת ימים")
+        root.addView(TextView(this).apply {
+            text = days.toString()
+            textSize = 72f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+        })
+        root.addView(TextView(this).apply {
+            text = if (days == 1) "יום נקי" else "ימים נקיים"
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(16))
+        })
+        root.addView(ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = goal
+            progress = days
+            scaleY = 3f
+            setPadding(0, dp(8), 0, dp(8))
+        })
+        text(
+            if (days < Streak.GOAL_DAYS) "עוד ${Streak.GOAL_DAYS - days} ימים ליעד של ${Streak.GOAL_DAYS} יום"
+            else "היעד הבא: $goal יום (עוד ${goal - days})"
+        )
+        text(Streak.message(days))
+        text(Streak.quote(days))
+        text("השיא שלך: ${Streak.best(this)} ימים · התחלת הספירה: ${date(Streak.start(this))}")
+
+        renderPanic()
+
+        button("נפלתי, מתחילים מחדש") {
+            AlertDialog.Builder(this)
+                .setTitle("להתחיל את הספירה מחדש?")
+                .setMessage("זה בסדר. נפילה היא לא סוף הדרך, היא חלק ממנה. השיא שלך נשמר.")
+                .setPositiveButton("מתחילים מחדש") { _, _ ->
+                    Streak.reset(this)
+                    toast("\"שבע יפול צדיק וקם\". יום 0, יוצאים לדרך.")
+                    render()
+                }
+                .setNegativeButton("ביטול", null)
+                .show()
+        }
+    }
+
+    /** The panic button, or how long panic mode still runs. */
+    private fun renderPanic() {
+        val panicUntil = Lockdown.panicUntil(this)
+        if (panicUntil > 0) {
+            text("🚨 מצב פאניקה פעיל עד ${date(panicUntil)} ${time(panicUntil)}. אי אפשר לפתוח את החסימה, גם לא עם הסיסמה. אפשר רק להאריך.")
+        }
+        button(if (panicUntil > 0) "🚨 להאריך את מצב הפאניקה" else "🚨 כפתור פאניקה") { confirmPanic() }
+    }
+
+    private fun confirmPanic() {
+        AlertDialog.Builder(this)
+            .setTitle("כמה זמן לחסום לגמרי?")
+            .setItems(Lockdown.PANIC_CHOICES.map { it.first }.toTypedArray()) { _, which ->
+                val (label, minutes) = Lockdown.PANIC_CHOICES[which]
+                AlertDialog.Builder(this)
+                    .setTitle("מצב פאניקה ל-$label?")
+                    .setMessage(
+                        "הטלפון יינעל עכשיו, ובמשך $label לא תוכל לפתוח את החסימה, גם עם הסיסמה. " +
+                            "אפליקציות מהרשימה ימשיכו לעבוד ולהתעדכן כרגיל.\n\n" +
+                            "אין דרך לבטל את זה לפני הזמן. הדרך היחידה היא איפוס יצרן, שמוחק הכל."
+                    )
+                    .setPositiveButton("כן, לחסום") { _, _ ->
+                        Lockdown.panic(this, minutes)
+                        render()
+                    }
+                    .setNegativeButton("ביטול", null)
+                    .show()
+            }
+            .setNegativeButton("ביטול", null)
+            .show()
     }
 
     // ---- Screens ----
@@ -135,9 +233,12 @@ class MainActivity : Activity() {
     private fun renderStore() {
         title("Googleblat")
         val until = Lockdown.unlockedUntil(this)
+        val filter = Lockdown.websiteFilter(this)
+        text(if (filter != null) "🛡 Website filter on ($filter)" else "⚠ Website filter not active yet. It turns on once the phone is online.")
         if (until == 0L) {
             text("🔒 Locked - only apps from this list can be installed")
-            button("Unlock…") { askPasswordThenUnlock() }
+            if (Lockdown.panicUntil(this) == 0L) button("Unlock…") { askPasswordThenUnlock() }
+            renderPanic()
         } else {
             text("🔓 Unlocked until ${time(until)}. All apps are visible, and other installs, ADB, " +
                 "Google Play and other stores are allowed. Apps not on the list (or kept) are " +
@@ -254,6 +355,7 @@ class MainActivity : Activity() {
     }
 
     private fun askPasswordThenUnlock() {
+        if (Lockdown.panicUntil(this) > 0) return
         val field = passwordInput()
         AlertDialog.Builder(this)
             .setTitle("Unlock password")
@@ -317,6 +419,8 @@ class MainActivity : Activity() {
     }
 
     // ---- Helpers ----
+
+    private fun date(t: Long): String = DateFormat.getDateFormat(this).format(Date(t))
 
     private fun time(t: Long): String = DateFormat.getTimeFormat(this).format(Date(t))
 

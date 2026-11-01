@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.UserManager
 import java.util.Calendar
 
@@ -36,6 +37,16 @@ object Lockdown {
         UserManager.DISALLOW_ADD_MANAGED_PROFILE,
     )
 
+    /** Applied even while unlocked: they protect the website filter and the panic/streak clocks. */
+    private val ALWAYS_RESTRICTIONS = listOf(
+        UserManager.DISALLOW_CONFIG_PRIVATE_DNS, // can't switch the website filter off
+        UserManager.DISALLOW_CONFIG_VPN,         // a VPN would route around the filter
+        UserManager.DISALLOW_CONFIG_DATE_TIME,   // moving the clock could end panic mode early
+    )
+
+    /** Panic mode lengths: label to minutes. */
+    val PANIC_CHOICES = listOf("24 שעות" to 1440, "3 ימים" to 4320, "7 ימים" to 10080, "30 יום" to 43200)
+
     /** Other stores that are privileged system apps, so unknown-sources rules don't apply to them. */
     private val OTHER_STORES = setOf(
         "com.xiaomi.market",    // Xiaomi GetApps
@@ -50,6 +61,8 @@ object Lockdown {
     private const val KEY_PLAY_MODE = "playMode"
     private const val KEY_EXTRA_BLOCKED = "extraBlocked"
     private const val KEY_ALWAYS_HIDDEN = "alwaysHidden"
+    private const val KEY_PANIC_UNTIL = "panicUntil"
+    private const val KEY_DNS_APPLIED = "dnsApplied"
 
     fun admin(ctx: Context) = ComponentName(ctx, AdminReceiver::class.java)
     fun dpm(ctx: Context): DevicePolicyManager = ctx.getSystemService(DevicePolicyManager::class.java)
@@ -90,7 +103,18 @@ object Lockdown {
         enforce(ctx)
     }
 
+    /** 0 when panic mode is off, otherwise when it ends. While on, the password can't unlock. */
+    fun panicUntil(ctx: Context) = futureOrZero(prefs(ctx).getLong(KEY_PANIC_UNTIL, 0))
+
+    /** Locks now and refuses unlocking for [minutes]. Can only be extended, never shortened. */
+    fun panic(ctx: Context, minutes: Int) {
+        val until = maxOf(panicUntil(ctx), System.currentTimeMillis() + minutes * 60_000L)
+        prefs(ctx).edit().putLong(KEY_PANIC_UNTIL, until).apply()
+        lock(ctx)
+    }
+
     fun unlock(ctx: Context, minutes: Int) {
+        if (panicUntil(ctx) > 0) return
         val until = System.currentTimeMillis() + minutes * 60_000L
         prefs(ctx).edit().putLong(KEY_UNTIL, until).apply()
         enforce(ctx)
@@ -121,6 +145,9 @@ object Lockdown {
         for (r in RESTRICTIONS) {
             if (locked) dpm.addUserRestriction(admin(ctx), r) else dpm.clearUserRestriction(admin(ctx), r)
         }
+        for (r in ALWAYS_RESTRICTIONS) dpm.addUserRestriction(admin(ctx), r)
+        if (Build.VERSION.SDK_INT >= 30) runCatching { dpm.setAutoTimeEnabled(admin(ctx), true) }
+        applyWebsiteFilter(ctx)
         setHidden(ctx, otherStores(ctx), locked)
         applyAlwaysBlocked(ctx)
         setPlayBlocked(ctx, locked && playOpenUntil(ctx) == 0L && !inNightlyWindow())
@@ -131,7 +158,8 @@ object Lockdown {
     /** Removes every policy and gives up device-owner status, so the app can be uninstalled. */
     fun releaseCompletely(ctx: Context) {
         val dpm = dpm(ctx)
-        RESTRICTIONS.forEach { dpm.clearUserRestriction(admin(ctx), it) }
+        (RESTRICTIONS + ALWAYS_RESTRICTIONS).forEach { dpm.clearUserRestriction(admin(ctx), it) }
+        runCatching { dpm.setGlobalPrivateDnsModeOpportunistic(admin(ctx)) }
         setHidden(ctx, otherStores(ctx), false)
         setHidden(ctx, prefs(ctx).getStringSet(KEY_ALWAYS_HIDDEN, emptySet())!!, false)
         setPlayBlocked(ctx, false)
@@ -153,6 +181,31 @@ object Lockdown {
         setHidden(ctx, before - now, false)
         setHidden(ctx, now, true)
         prefs(ctx).edit().putStringSet(KEY_ALWAYS_HIDDEN, now).apply()
+    }
+
+    /** The private-DNS host filtering websites right now, or null if the filter is off. */
+    fun websiteFilter(ctx: Context): String? = prefs(ctx).getString(KEY_DNS_APPLIED, null)
+
+    /**
+     * Sets the catalog's "privateDns" host as the phone-wide DNS, for every app and every network.
+     * Android checks the host actually works before accepting it; if it doesn't (e.g. offline),
+     * nothing changes and the next [enforce] tries again. This can take seconds, so it runs off
+     * the main thread.
+     */
+    private fun applyWebsiteFilter(ctx: Context) {
+        val wanted = CatalogRepo.cached(ctx)?.privateDns
+        if (wanted == websiteFilter(ctx)) return
+        val app = ctx.applicationContext
+        Thread {
+            val ok = if (wanted == null) {
+                dpm(app).setGlobalPrivateDnsModeOpportunistic(admin(app)) == DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR
+            } else {
+                runCatching {
+                    dpm(app).setGlobalPrivateDnsModeSpecifiedHost(admin(app), wanted)
+                }.getOrNull() == DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR
+            }
+            if (ok) prefs(app).edit().putString(KEY_DNS_APPLIED, wanted).apply()
+        }.start()
     }
 
     private fun inNightlyWindow() =
